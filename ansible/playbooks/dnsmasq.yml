@@ -1,0 +1,97 @@
+---
+- hosts: localhost
+  connection: local
+  become: true
+  vars:
+    lan_iface: "eth0"
+    dhcp_start: "192.168.0.10"
+    dhcp_end:   "192.168.0.50"
+    mask: "255.255.255.0"
+    dhcp_lease: "24h"
+    domain:     "bowie.fis.agh.edu.pl"
+    router:     "192.168.0.1"
+    upstream_dns:
+      - "127.0.0.1"
+      - "1.1.1.1"
+      - "8.8.8.8"
+
+  tasks:
+    - name: Bring up enp0s9 and assign static IP
+      ansible.builtin.shell: |
+        ip addr flush dev {{ lan_iface }} || true
+        ip addr add {{ router }}/24 dev enp0s9
+        ip link set {{ lan_iface }} up
+      become: true
+
+    - name: Install dnsmasq package
+      ansible.builtin.apt:
+        name: dnsmasq
+        state: present
+        update_cache: yes
+
+    - name: Stop and disable systemd-resolved (if running) — avoid port 53 conflicts
+      ansible.builtin.systemd:
+        name: systemd-resolved
+        enabled: false
+        state: stopped
+      ignore_errors: yes
+
+    - name: Remove /etc/resolv.conf symlink (if any)
+      ansible.builtin.file:
+        path: /etc/resolv.conf
+        state: absent
+        force: true
+      ignore_errors: yes
+
+    - name: Write new /etc/resolv.conf (so dnsmasq has upstream DNS)
+      ansible.builtin.copy:
+        dest: /etc/resolv.conf
+        content: |
+          nameserver 127.0.0.1
+
+    - name: Deploy dnsmasq.conf
+      ansible.builtin.copy:
+        dest: /etc/dnsmasq.conf
+        content: |
+          domain-needed
+          bogus-priv
+          interface={{ lan_iface }}
+          dhcp-range={{ dhcp_start }},{{ dhcp_end }},{{ mask }},{{ dhcp_lease }}
+          dhcp-option=option:router,{{ router }}
+          domain={{ domain }}
+          expand-hosts
+          no-resolv
+          {% for dns in upstream_dns %}
+          server={{ dns }}
+          {% endfor %}
+          bind-interfaces
+      notify: Restart dnsmasq
+
+    - name: Enable IPv4 forwarding (routing) in kernel
+      become: true
+      ansible.posix.sysctl:
+        name: net.ipv4.ip_forward
+        value: '1'
+        state: present
+        sysctl_set: yes
+        reload: yes
+        
+    - name: Masquerade outbound traffic on external interface enp0s8
+      become: true
+      ansible.builtin.iptables:
+        table: nat
+        chain: POSTROUTING
+        out_interface: enp0s8
+        jump: MASQUERADE
+
+    - name: Ensure dnsmasq is enabled and started
+      ansible.builtin.service:
+        name: dnsmasq
+        enabled: true
+        state: started
+
+  handlers:
+    - name: Restart dnsmasq
+      ansible.builtin.service:
+        name: dnsmasq
+        state: restarted
