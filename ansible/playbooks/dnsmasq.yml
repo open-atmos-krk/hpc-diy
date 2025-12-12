@@ -16,10 +16,10 @@
       - "8.8.8.8"
 
   tasks:
-    - name: Bring up enp0s9 and assign static IP
+    - name: Bring up eth0 and assign static IP
       ansible.builtin.shell: |
         ip addr flush dev {{ lan_iface }} || true
-        ip addr add {{ router }}/24 dev enp0s9
+        ip addr add {{ router }}/24 dev {{ lan_iface }}
         ip link set {{ lan_iface }} up
       become: true
 
@@ -76,12 +76,12 @@
         sysctl_set: yes
         reload: yes
         
-    - name: Masquerade outbound traffic on external interface enp0s8
+    - name: Masquerade outbound traffic on external interface enx3c18a0092635
       become: true
       ansible.builtin.iptables:
         table: nat
         chain: POSTROUTING
-        out_interface: enp0s8
+        out_interface: enx3c18a0092635
         jump: MASQUERADE
 
     - name: Ensure dnsmasq is enabled and started
