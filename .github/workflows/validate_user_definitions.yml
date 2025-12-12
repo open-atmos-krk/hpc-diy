@@ -12,7 +12,7 @@ jobs:
 
       - name: Validate usernames
         run: |
-          for file in infrastructure/users/*.yml; do
+          for file in users/*.yml; do
             username=$(yq '.username' "$file")
             if ! [[ "$username" =~ ^[a-z_][a-z0-9_-]*$ ]]; then
               echo "Invalid username: $username"
@@ -22,7 +22,7 @@ jobs:
 
       - name: Validate SSH keys
         run: |
-          for file in infrastructure/users/*.yml; do
+          for file in users/*.yml; do
             for key in $(yq '.ssh_keys[]' "$file"); do
               echo "$key" | ssh-keygen -l -f - >/dev/null 2>&1 \
                 || { echo "Invalid SSH key in $file"; exit 1; }
