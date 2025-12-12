@@ -1,7 +1,8 @@
 name: Validate User Definitions
 
 on:
-  pull_request:
+  pull_request: 
+      branches: [ main ]
 
 jobs:
   validate:
