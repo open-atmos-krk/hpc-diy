@@ -1,0 +1,7 @@
+username: slayoo
+full_name: "Sylwestert Arabas"
+ssh_keys:
+  - ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQC58CmQAtyiYzjSnChp05KkzlaXj3Jh6ITaG7yz2HU72XMoxCurQLcaNjioxS9hyKsB/M0IwvKkhVYhzXWadj5F6fLRmEca4mBs9mN/4iKIMRUXnhTLaonLqr0BZ0UP74KyJgG/5mtslode1gGnAI6uxQjYlg2dva32bZ+NH6zIA6YmQA9mxIqZj/f+bKsmH36kN7G1FwNxwSNtH+6kE/uA+Y4dVNSSZgAglIo5xWsNAKXgbFF/UGfehoW5c/y132Y+AjRf4fHKdg2GxFRLYDzNdW8sU5B32L6H4uN69NVxPnSQS5F5QbvAfdfrJpNh2sRQFRFPUauBJ+rMDkz7hP8p slayoo@eyrie
+groups:
+  - sudo
+state: present

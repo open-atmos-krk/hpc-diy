@@ -1,0 +1,13 @@
+- name: Create users
+  user:
+    name: "{{ item.username }}"
+    state: "{{ item.state | default('present') }}"
+    groups: "{{ item.groups | default([]) }}"
+  loop: "{{ users }}"
+
+- name: Insert SSH keys
+  authorized_key:
+    user: "{{ item.username }}"
+    key: "{{ item.ssh_keys | join('\n') }}"
+  when: item.state|default('present') == 'present'
+  loop: "{{ users }}"
