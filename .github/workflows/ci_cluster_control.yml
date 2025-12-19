@@ -1,0 +1,25 @@
+name: Cluster Control CI
+
+defaults:
+  run:
+    working-directory: cluster-control
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+    paths:
+      - 'cluster-control/**' 
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'cluster-control/**'
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install package
+        run: |
+          make install

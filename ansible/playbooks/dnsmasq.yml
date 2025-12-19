@@ -75,7 +75,7 @@
         state: present
         sysctl_set: yes
         reload: yes
-        
+
     - name: Masquerade outbound traffic on external interface enx3c18a0092635
       become: true
       ansible.builtin.iptables:

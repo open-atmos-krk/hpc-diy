@@ -6,16 +6,17 @@
 
   vars:
     app_name: cluster-health
-    app_dir: /opt/cluster_control
+    local_service_dir: /opt/cluster_control
+    repo_url: https://github.com/open-atmos-krk/hpc-diy.git
+    repo_service_dir: cluster-control
+    venv_dir: "{{ local_service_dir }}/{{ repo_service_dir }}/venv"
     app_user: "{{ ansible_user_id }}"
-    repo_url: https://github.com/Delcior/cluster-control.git
-    venv_dir: /opt/cluster_control/venv
     service_name: cluster_control
 
   tasks:
     - name: Ensure app directory exists
       ansible.builtin.file:
-        path: "{{ app_dir }}"
+        path: "{{ local_service_dir }}"
         state: directory
         owner: "{{ app_user }}"
         group: "{{ app_user }}"
@@ -34,7 +35,7 @@
     - name: Clone or update application repository
       ansible.builtin.git:
         repo: "{{ repo_url }}"
-        dest: "{{ app_dir }}"
+        dest: "{{ local_service_dir }}"
         version: main
         force: yes
 
@@ -52,8 +53,8 @@
           Type=simple
           User={{ app_user }}
           Group={{ app_user }}
-          WorkingDirectory={{ app_dir }}
-          ExecStart={{ app_dir }}/start.sh
+          WorkingDirectory={{ local_service_dir }}/{{ repo_service_dir }}
+          ExecStart={{ local_service_dir }}/{{ repo_service_dir }}/start.sh
           Restart=always
           RestartSec=3
 
