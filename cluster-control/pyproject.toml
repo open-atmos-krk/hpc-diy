@@ -1,0 +1,33 @@
+[project]
+name = "cluster_control"
+version = "0.0.1"
+description = "Supercomputer monitoring & management"
+authors = [{ name = "TBD" }]
+
+classifiers = ["Programming Language :: Python :: 3"]
+
+license = 'MIT'
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = ["fastapi[standard]", "pydantic", "uvicorn"]
+
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+include-package-data = true
+packages = [
+  'cluster_control',
+  'cluster_control.utils',
+  'cluster_control.checks'
+]
+
+[tool.pytest.ini_options]
+norecursedirs = [
+  ".git",
+]
+timeout = 300
+timeout_method = "thread"
+timeout_func_only = true
+
