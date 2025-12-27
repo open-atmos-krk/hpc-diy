@@ -1,5 +1,5 @@
 - name: Manage users
-  hosts: localhosts
+  hosts: localhost
   become: yes
 
   tasks:
