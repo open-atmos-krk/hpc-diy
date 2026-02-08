@@ -12,7 +12,6 @@
     domain:     "bowie.fis.agh.edu.pl"
     router:     "192.168.0.1"
     upstream_dns:
-      - "127.0.0.1"
       - "1.1.1.1"
       - "8.8.8.8"
 
