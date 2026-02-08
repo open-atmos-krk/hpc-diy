@@ -26,4 +26,3 @@ jobs:
             yq '.ssh_key' "$file" | ssh-keygen -l -f - >/dev/null 2>&1 \
                 || { echo "Invalid SSH key in $file"; exit 1; }
           done
-

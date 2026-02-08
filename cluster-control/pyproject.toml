@@ -31,3 +31,29 @@ timeout = 300
 timeout_method = "thread"
 timeout_func_only = true
 
+[project.optional-dependencies]
+lint = [
+  "ruff",
+  "mypy",
+]
+
+[tool.mypy]
+check_untyped_defs = true
+explicit_package_bases = true
+warn_unreachable = true
+warn_redundant_casts = true
+
+[tool.ruff]
+preview = true
+target-version = "py314"
+line-length = 120
+lint.select = [
+  "B",   # bugbear
+  "F",   # pyflakes
+  "PIE", # flake8-pie
+  "PTH", # flake8-pathlib
+  "PYI", # flake8-pyi
+  "RUF", # ruff
+  "UP",  # pyupgrade
+  "W",   # pycodestyle
+]
