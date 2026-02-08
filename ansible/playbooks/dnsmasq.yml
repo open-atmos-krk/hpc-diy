@@ -4,6 +4,7 @@
   become: true
   vars:
     lan_iface: "eth0"
+    external_iface: "enx3c18a0092635"
     dhcp_start: "192.168.0.10"
     dhcp_end:   "192.168.0.50"
     mask: "255.255.255.0"
@@ -76,12 +77,12 @@
         sysctl_set: yes
         reload: yes
 
-    - name: Masquerade outbound traffic on external interface enx3c18a0092635
+    - name: Masquerade outbound traffic on external interface
       become: true
       ansible.builtin.iptables:
         table: nat
         chain: POSTROUTING
-        out_interface: enx3c18a0092635
+        out_interface: "{{ external_iface }}"
         jump: MASQUERADE
 
     - name: Ensure dnsmasq is enabled and started
