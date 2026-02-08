@@ -3,14 +3,14 @@
   connection: local
   become: true
   vars:
-    lan_iface: "eth0"
     external_iface: "enx3c18a0092635"
-    dhcp_start: "192.168.0.10"
-    dhcp_end:   "192.168.0.50"
-    mask: "255.255.255.0"
-    dhcp_lease: "24h"
-    domain:     "bowie.fis.agh.edu.pl"
-    router:     "192.168.0.1"
+    dhcp_start:     "192.168.0.10"
+    dhcp_end:       "192.168.0.50"
+    dhcp_iface:     "eth0"
+    dhcp_iface_ip:  "192.168.0.1"
+    dhcp_mask:      "255.255.255.0"
+    dhcp_lease:     "24h"
+    dhcp_domain:    "bowie.fis.agh.edu.pl"
     upstream_dns:
       - "1.1.1.1"
       - "8.8.8.8"
@@ -18,9 +18,9 @@
   tasks:
     - name: Bring up eth0 and assign static IP
       ansible.builtin.shell: |
-        ip addr flush dev {{ lan_iface }} || true
-        ip addr add {{ router }}/24 dev {{ lan_iface }}
-        ip link set {{ lan_iface }} up
+        ip addr flush dev {{ dhcp_iface }} || true
+        ip addr add {{ dhcp_iface_ip }}/24 dev {{ dhcp_iface }}
+        ip link set {{ dhcp_iface }} up
       become: true
 
     - name: Install dnsmasq package
@@ -55,10 +55,10 @@
         content: |
           domain-needed
           bogus-priv
-          interface={{ lan_iface }}
-          dhcp-range={{ dhcp_start }},{{ dhcp_end }},{{ mask }},{{ dhcp_lease }}
-          dhcp-option=option:router,{{ router }}
-          domain={{ domain }}
+          interface={{ dhcp_iface }}
+          dhcp-range={{ dhcp_start }},{{ dhcp_end }},{{ dhcp_mask }},{{ dhcp_lease }}
+          dhcp-option=option:router,{{ dhcp_iface_ip }}
+          domain={{ dhcp_domain }}
           expand-hosts
           no-resolv
           {% for dns in upstream_dns %}
