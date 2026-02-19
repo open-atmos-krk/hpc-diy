@@ -52,7 +52,7 @@ def _add_static_dhcp_entry(mac: str):
         f.write(f"dhcp-host={mac},{name}, {ip}\n")
 
 
-#TODO: names has to be turbo-static. 
+#TODO: names has to be turbo-static.
 def _next_node_name():
     path = pathlib.Path(get_dhcp_config_path())
     lines = [line.strip() for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
