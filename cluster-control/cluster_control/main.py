@@ -51,7 +51,6 @@ def _add_static_dhcp_entry(mac: str):
         name = _next_node_name()
         f.write(f"dhcp-host={mac},{name}, {ip}\n")
 
-
 #TODO: names has to be turbo-static.
 def _next_node_name():
     path = pathlib.Path(get_dhcp_config_path())
@@ -63,7 +62,6 @@ def _next_node_name():
         number = int(last_name[last_name.rfind("_")+1:]) + 1
     except ValueError as e:
         print(f"Unexpected node name format: {last_name!r}")
-        #TODO: should raise exception
         raise RuntimeError(f"Unexpected node name format: {last_name!r}") from e
     return f"{_NODE_BASE_NAME}_{number}"
 

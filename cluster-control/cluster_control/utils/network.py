@@ -62,7 +62,7 @@ def _get_iface_ip(iface: str) -> ipaddress.IPv4Address:
     raise RuntimeError(f"no IPv4 address found on {iface}")
 
 def _parse_dhcp_ranges(conf_path: Path):
-    ranges = []
+    ranges: list[tuple[ipaddress.IPv4Address, ipaddress.IPv4Address]] = []
     try:
         content = conf_path.read_text(encoding="utf-8")
     except OSError:
