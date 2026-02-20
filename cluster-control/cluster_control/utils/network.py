@@ -2,7 +2,7 @@ import ipaddress
 import re
 import subprocess
 from pathlib import Path
-from cluster_control.utils.paths import get_available_ips_path, get_dnsmasq_config_path
+from cluster_control.utils.config import get_available_ips_path, get_dnsmasq_config_path
 
 IPV4_RE = re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}\b")
 

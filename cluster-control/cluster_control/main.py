@@ -2,7 +2,7 @@ import pathlib
 import subprocess
 from fastapi import FastAPI
 from pydantic import BaseModel
-from cluster_control.utils.paths import HEALTH_CHECK_LIST, get_available_ips_path, get_dhcp_config_path
+from cluster_control.utils.config import HEALTH_CHECK_LIST, get_available_ips_path, get_dhcp_config_path
 from cluster_control.utils.network import get_available_ips, pop_available_ip, write_available_ips
 
 _NODE_BASE_NAME = "jetson_"
