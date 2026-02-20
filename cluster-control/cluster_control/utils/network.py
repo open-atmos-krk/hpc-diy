@@ -2,7 +2,11 @@ import ipaddress
 import re
 import subprocess
 from pathlib import Path
-from cluster_control.utils.config import get_available_ips_path, get_dnsmasq_config_path
+from cluster_control.utils.config import (
+    get_available_ips_path,
+    get_dhcp_config_path,
+    get_dnsmasq_config_path,
+)
 
 IPV4_RE = re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}\b")
 
@@ -16,7 +20,8 @@ def get_available_ips():
     network = _get_iface_network(iface)
     iface_ip = _get_iface_ip(iface)
     dhcp_ranges = _parse_dhcp_ranges(conf_path)
-    excludes = [iface_ip]
+    static_ips = _parse_static_dhcp_ips(Path(get_dhcp_config_path()))
+    excludes = [iface_ip, *static_ips]
 
     available = _collect_available_ips(network, dhcp_ranges, excludes)
     return available
@@ -102,6 +107,28 @@ def _parse_interface(conf_path: Path):
             continue
         return value.strip()
     return ""
+
+
+def _parse_static_dhcp_ips(conf_path: Path):
+    ips: list[ipaddress.IPv4Address] = []
+    try:
+        content = conf_path.read_text(encoding="utf-8")
+    except OSError:
+        return ips
+    for raw_line in content.splitlines():
+        line = raw_line.split("#", 1)[0].split(";", 1)[0].strip()
+        if not line:
+            continue
+        if not line.startswith("dhcp-host"):
+            continue
+        matches = IPV4_RE.findall(line)
+        if not matches:
+            continue
+        try:
+            ips.append(ipaddress.IPv4Address(matches[-1]))
+        except ipaddress.AddressValueError:
+            continue
+    return ips
 
 def _iter_range(start: ipaddress.IPv4Address, end: ipaddress.IPv4Address):
     current = int(start)

@@ -59,12 +59,15 @@ def test_collect_available_ips_excludes_ranges_and_iface():
 
 def test_get_available_ips_uses_dnsmasq_config(monkeypatch, tmp_path):
     conf = tmp_path / "dnsmasq.conf"
+    static_conf = tmp_path / "static_dhcp.conf"
     conf.write_text(
         "interface=enp0s9\n"
         "dhcp-range=172.16.0.10,172.16.0.50,255.255.255.0,24h\n",
         encoding="utf-8",
     )
+    static_conf.write_text("dhcp-host=aa:bb:cc,jetson_0, 172.16.0.20\n", encoding="utf-8")
     monkeypatch.setattr(network, "get_dnsmasq_config_path", lambda: str(conf))
+    monkeypatch.setattr(network, "get_dhcp_config_path", lambda: str(static_conf))
     monkeypatch.setattr(network, "_get_iface_network", lambda _iface: ipaddress.ip_network("172.16.0.0/24"))
     monkeypatch.setattr(network, "_get_iface_ip", lambda _iface: ipaddress.IPv4Address("172.16.0.1"))
 
@@ -72,3 +75,4 @@ def test_get_available_ips_uses_dnsmasq_config(monkeypatch, tmp_path):
 
     assert ipaddress.IPv4Address("172.16.0.1") not in available
     assert ipaddress.IPv4Address("172.16.0.10") not in available
+    assert ipaddress.IPv4Address("172.16.0.20") not in available
