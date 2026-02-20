@@ -5,7 +5,7 @@ from pydantic import BaseModel
 from cluster_control.utils.config import HEALTH_CHECK_LIST, get_available_ips_path, get_dhcp_config_path
 from cluster_control.utils.network import get_available_ips, pop_available_ip, write_available_ips
 
-_NODE_BASE_NAME = "jetson_"
+_NODE_BASE_NAME = "jetson"
 
 app = FastAPI()
 
@@ -56,10 +56,12 @@ def _next_node_name():
     path = pathlib.Path(get_dhcp_config_path())
     lines = [line.strip() for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
     if not lines:
-        return _NODE_BASE_NAME + '0'
-    last_name = lines[-1].split(",")[1].strip()
+        return f"{_NODE_BASE_NAME}_0"
     try:
+        last_name = lines[-1].split(",")[1].strip()
         number = int(last_name[last_name.rfind("_")+1:]) + 1
+    except IndexError as e:
+        raise RuntimeError(f"Unexpected node name format: {lines[-1]!r}") from e
     except ValueError as e:
         print(f"Unexpected node name format: {last_name!r}")
         raise RuntimeError(f"Unexpected node name format: {last_name!r}") from e

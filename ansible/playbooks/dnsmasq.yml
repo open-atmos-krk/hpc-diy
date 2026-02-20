@@ -9,6 +9,7 @@
     dhcp_iface:     "eth0"
     dhcp_iface_ip:  "192.168.0.1"
     dhcp_mask:      "255.255.255.0"
+    dhcp_mask_cidr: "24"
     dhcp_lease:     "24h"
     dhcp_domain:    "bowie.fis.agh.edu.pl"
     upstream_dns:
@@ -23,6 +24,19 @@
         ip link set {{ dhcp_iface }} up
       become: true
 
+    - name: Write netplan config
+      ansible.builtin.copy:
+        dest: /etc/netplan/99-ansible.yaml
+        content: |
+          network:
+            version: 2
+            renderer: networkd
+            ethernets:
+              {{ dhcp_iface }}:
+                dhcp4: false
+                addresses: [{{ dhcp_iface_ip }}/{{ dhcp_mask_cidr }}]
+      notify: Apply netplan
+      
     - name: Install dnsmasq package
       ansible.builtin.apt:
         name: dnsmasq
@@ -59,6 +73,7 @@
           dhcp-range={{ dhcp_start }},{{ dhcp_end }},{{ dhcp_mask }},{{ dhcp_lease }}
           dhcp-option=option:router,{{ dhcp_iface_ip }}
           domain={{ dhcp_domain }}
+          conf-dir=/etc/dnsmasq.d
           expand-hosts
           no-resolv
           {% for dns in upstream_dns %}
@@ -95,3 +110,6 @@
       ansible.builtin.service:
         name: dnsmasq
         state: restarted
+  
+    - name: Apply netplan
+      ansible.builtin.command: netplan apply

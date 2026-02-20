@@ -1,6 +1,8 @@
 from types import SimpleNamespace
 from unittest.mock import Mock
 
+import pytest
+
 import cluster_control.main as main
 
 
@@ -55,3 +57,41 @@ def test_register_node_failure(monkeypatch):
     response = main.register_node(main.Node(mac_address="aa:bb:cc:dd:ee:ff"))
 
     assert response["status_code"] == 500
+
+
+def test_next_node_name_when_empty(monkeypatch, tmp_path):
+    dhcp_file = tmp_path / "static_dhcp.conf"
+    dhcp_file.write_text("", encoding="utf-8")
+    monkeypatch.setattr(main, "get_dhcp_config_path", lambda: str(dhcp_file))
+
+    name = main._next_node_name()
+
+    assert name == "jetson_0"
+
+
+def test_next_node_name_increments(monkeypatch, tmp_path):
+    dhcp_file = tmp_path / "static_dhcp.conf"
+    dhcp_file.write_text("dhcp-host=aa:bb:cc,jetson_7, 192.168.0.2\n", encoding="utf-8")
+    monkeypatch.setattr(main, "get_dhcp_config_path", lambda: str(dhcp_file))
+
+    name = main._next_node_name()
+
+    assert name == "jetson_8"
+
+
+def test_next_node_name_invalid_name_raises(monkeypatch, tmp_path):
+    dhcp_file = tmp_path / "static_dhcp.conf"
+    dhcp_file.write_text("dhcp-host=aa:bb:cc,jetson, 192.168.0.2\n", encoding="utf-8")
+    monkeypatch.setattr(main, "get_dhcp_config_path", lambda: str(dhcp_file))
+
+    with pytest.raises(RuntimeError, match="Unexpected node name format"):
+        main._next_node_name()
+
+
+def test_next_node_name_missing_name_raises(monkeypatch, tmp_path):
+    dhcp_file = tmp_path / "static_dhcp.conf"
+    dhcp_file.write_text("dhcp-host=aa:bb:cc\n", encoding="utf-8")
+    monkeypatch.setattr(main, "get_dhcp_config_path", lambda: str(dhcp_file))
+
+    with pytest.raises(RuntimeError, match="Unexpected node name format"):
+        main._next_node_name()
