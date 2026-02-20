@@ -1,0 +1,13 @@
+name: 'Main Workflow'
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 * * * *"
+jobs:
+  greet:
+    runs-on: self-hosted
+    steps:
+      - name: Cluster Status Check
+        shell: bash
+        run: |
+          echo 'Hello from the $(hostname)!'
