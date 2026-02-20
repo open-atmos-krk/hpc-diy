@@ -79,7 +79,7 @@
           {% for dns in upstream_dns %}
           server={{ dns }}
           {% endfor %}
-          bind-interfaces
+          bind-dynamic
       notify: Restart dnsmasq
 
     - name: Enable IPv4 forwarding (routing) in kernel
