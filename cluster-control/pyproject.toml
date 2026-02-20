@@ -36,6 +36,9 @@ lint = [
   "ruff",
   "mypy",
 ]
+test = [
+  "pytest",
+]
 
 [tool.mypy]
 check_untyped_defs = true

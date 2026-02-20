@@ -3,26 +3,40 @@
   connection: local
   become: true
   vars:
-    lan_iface: "eth0"
-    dhcp_start: "192.168.0.10"
-    dhcp_end:   "192.168.0.50"
-    mask: "255.255.255.0"
-    dhcp_lease: "24h"
-    domain:     "bowie.fis.agh.edu.pl"
-    router:     "192.168.0.1"
+    external_iface: "enx3c18a0092635"
+    dhcp_start:     "192.168.0.10"
+    dhcp_end:       "192.168.0.50"
+    dhcp_iface:     "eth0"
+    dhcp_iface_ip:  "192.168.0.1"
+    dhcp_mask:      "255.255.255.0"
+    dhcp_mask_cidr: "24"
+    dhcp_lease:     "24h"
+    dhcp_domain:    "bowie.fis.agh.edu.pl"
     upstream_dns:
-      - "127.0.0.1"
       - "1.1.1.1"
       - "8.8.8.8"
 
   tasks:
     - name: Bring up eth0 and assign static IP
       ansible.builtin.shell: |
-        ip addr flush dev {{ lan_iface }} || true
-        ip addr add {{ router }}/24 dev {{ lan_iface }}
-        ip link set {{ lan_iface }} up
+        ip addr flush dev {{ dhcp_iface }} || true
+        ip addr add {{ dhcp_iface_ip }}/24 dev {{ dhcp_iface }}
+        ip link set {{ dhcp_iface }} up
       become: true
 
+    - name: Write netplan config
+      ansible.builtin.copy:
+        dest: /etc/netplan/99-ansible.yaml
+        content: |
+          network:
+            version: 2
+            renderer: networkd
+            ethernets:
+              {{ dhcp_iface }}:
+                dhcp4: false
+                addresses: [{{ dhcp_iface_ip }}/{{ dhcp_mask_cidr }}]
+      notify: Apply netplan
+      
     - name: Install dnsmasq package
       ansible.builtin.apt:
         name: dnsmasq
@@ -55,10 +69,11 @@
         content: |
           domain-needed
           bogus-priv
-          interface={{ lan_iface }}
-          dhcp-range={{ dhcp_start }},{{ dhcp_end }},{{ mask }},{{ dhcp_lease }}
-          dhcp-option=option:router,{{ router }}
-          domain={{ domain }}
+          interface={{ dhcp_iface }}
+          dhcp-range={{ dhcp_start }},{{ dhcp_end }},{{ dhcp_mask }},{{ dhcp_lease }}
+          dhcp-option=option:router,{{ dhcp_iface_ip }}
+          domain={{ dhcp_domain }}
+          conf-dir=/etc/dnsmasq.d
           expand-hosts
           no-resolv
           {% for dns in upstream_dns %}
@@ -76,12 +91,12 @@
         sysctl_set: yes
         reload: yes
 
-    - name: Masquerade outbound traffic on external interface enx3c18a0092635
+    - name: Masquerade outbound traffic on external interface
       become: true
       ansible.builtin.iptables:
         table: nat
         chain: POSTROUTING
-        out_interface: enx3c18a0092635
+        out_interface: "{{ external_iface }}"
         jump: MASQUERADE
 
     - name: Ensure dnsmasq is enabled and started
@@ -95,3 +110,6 @@
       ansible.builtin.service:
         name: dnsmasq
         state: restarted
+  
+    - name: Apply netplan
+      ansible.builtin.command: netplan apply
