@@ -2,7 +2,7 @@ name: 'Main Workflow'
 on:
   workflow_dispatch:
   schedule:
-    - cron: "0 * * * *"
+    - cron: "* * * * *"
 jobs:
   greet:
     runs-on: self-hosted
@@ -11,3 +11,5 @@ jobs:
         shell: bash
         run: |
           echo 'Hello from the $(hostname)!'
+          ping -c 5 major-tom
+          ping -c 5 ground-control
