@@ -11,5 +11,8 @@ jobs:
         shell: bash
         run: |
           echo 'Hello from the $(hostname)!'
-          ping -c 5 major-tom
-          ping -c 5 ground-control
+          failed=0
+          for target in major-tom ground-control; do
+            ping -c 5 "$target" || failed=1
+          done
+          exit $failed
