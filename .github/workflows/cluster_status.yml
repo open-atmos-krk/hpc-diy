@@ -2,7 +2,7 @@ name: 'Main Workflow'
 on:
   workflow_dispatch:
   schedule:
-    - cron: "* * * * *"
+    - cron: "0 */6 * * *"
 jobs:
   greet:
     runs-on: self-hosted
