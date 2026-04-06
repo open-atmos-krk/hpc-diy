@@ -1,0 +1,51 @@
+---
+- name: Synchronize clocks on Slurm hosts using chrony
+  hosts: slurm_hosts
+  become: true
+  gather_facts: false
+
+  vars:
+    chrony_servers:
+      - "0.pool.ntp.org iburst"
+      - "1.pool.ntp.org iburst"
+      - "2.pool.ntp.org iburst"
+      - "3.pool.ntp.org iburst"
+
+  tasks:
+    - name: Install chrony
+      ansible.builtin.apt:
+        name: chrony
+        state: present
+        update_cache: true
+
+    - name: Configure chrony time sources
+      ansible.builtin.copy:
+        dest: /etc/chrony/chrony.conf
+        mode: "0644"
+        content: |
+          # Managed by Ansible
+          {% for entry in chrony_servers %}
+          server {{ entry }}
+          {% endfor %}
+          driftfile /var/lib/chrony/chrony.drift
+          makestep 1.0 3
+          rtcsync
+          keyfile /etc/chrony/chrony.keys
+          leapsectz right/UTC
+      notify: Restart chrony
+
+    - name: Ensure chrony service is enabled and running
+      ansible.builtin.systemd:
+        name: chrony
+        enabled: true
+        state: started
+
+    - name: Check chrony tracking status
+      ansible.builtin.command: chronyc tracking
+      changed_when: false
+
+  handlers:
+    - name: Restart chrony
+      ansible.builtin.systemd:
+        name: chrony
+        state: restarted

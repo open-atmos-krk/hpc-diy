@@ -1,0 +1,79 @@
+---
+- name: Build and install Slurm DEB packages on each Slurm host
+  hosts: slurm_hosts
+  become: true
+  gather_facts: false
+
+  vars:
+    slurm_version: "25.11.0"
+    slurm_tarball: "slurm-{{ slurm_version }}.tar.bz2"
+    slurm_download_url: "https://download.schedmd.com/slurm/{{ slurm_tarball }}"
+    slurm_build_root: /tmp/slurm-build
+    slurm_src_root: "{{ slurm_build_root }}/src"
+    slurm_src_dir: "{{ slurm_src_root }}/slurm-{{ slurm_version }}"
+    slurm_sysconfdir: /etc/slurm
+
+    slurm_controller_group: local
+    slurm_compute_group: nodes
+
+  tasks:
+    - name: Install package build prerequisites
+      ansible.builtin.apt:
+        name:
+          - build-essential
+          - fakeroot
+          - devscripts
+          - equivs
+          - ca-certificates
+          - wget
+          - bzip2
+        state: present
+        update_cache: true
+
+    - name: Ensure Slurm build directory exists
+      ansible.builtin.file:
+        path: "{{ slurm_src_root }}"
+        state: directory
+        mode: "0755"
+
+    - name: Download Slurm source tarball
+      ansible.builtin.get_url:
+        url: "{{ slurm_download_url }}"
+        dest: "{{ slurm_src_root }}/{{ slurm_tarball }}"
+        mode: "0644"
+
+    - name: Remove previous source directory before unpacking
+      ansible.builtin.file:
+        path: "{{ slurm_src_dir }}"
+        state: absent
+
+    - name: Unpack Slurm source
+      ansible.builtin.unarchive:
+        src: "{{ slurm_src_root }}/{{ slurm_tarball }}"
+        dest: "{{ slurm_src_root }}"
+        remote_src: true
+
+    - name: Install Slurm package build dependencies
+      ansible.builtin.command: mk-build-deps -i -r -t "apt-get -y --no-install-recommends" debian/control
+      args:
+        chdir: "{{ slurm_src_dir }}"
+
+    - name: Build Slurm DEB packages
+      ansible.builtin.command: debuild -b -uc -us
+      args:
+        chdir: "{{ slurm_src_dir }}"
+      environment:
+        DEB_CONFIGURE_EXTRA_FLAGS: "--sysconfdir={{ slurm_sysconfdir }}"
+
+    - name: Determine Slurm daemon package for this host role
+      ansible.builtin.set_fact:
+        slurm_daemon_pkg: "{{ 'slurmctld' if inventory_hostname in groups.get(slurm_controller_group, []) else 'slurmd' }}"
+
+    - name: Install built Slurm packages for this host role
+      ansible.builtin.shell: >-
+        apt-get install -y --no-install-recommends
+        {{ slurm_src_root }}/slurm-smd_*_*.deb
+        {{ slurm_src_root }}/slurm-smd-client_*_*.deb
+        {{ slurm_src_root }}/slurm-smd-{{ slurm_daemon_pkg }}_*_*.deb
+      args:
+        executable: /bin/bash

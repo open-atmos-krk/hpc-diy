@@ -1,0 +1,58 @@
+---
+- name: Install prebuilt Slurm DEB package on nodes
+  hosts: nodes
+  become: true
+  gather_facts: false
+
+  vars:
+    slurm_deb_path: "{{ slurm_deb_path | default('') }}"
+    slurm_pkg_name: "slurm-custom"
+    remote_deb_path: "/tmp/{{ slurm_deb_path | basename }}"
+
+  tasks:
+    - name: Validate slurm_deb_path variable is provided
+      assert:
+        that:
+          - slurm_deb_path | length > 0
+        fail_msg: "Pass DEB path with -e slurm_deb_path=/absolute/path/to/slurm-custom_24.05.5-1_arm64.deb"
+      run_once: true
+
+    - name: Check DEB exists on control machine
+      stat:
+        path: "{{ slurm_deb_path }}"
+      delegate_to: localhost
+      become: false
+      register: slurm_deb_stat
+      run_once: true
+
+    - name: Fail if DEB is missing on control machine
+      assert:
+        that:
+          - slurm_deb_stat.stat.exists
+          - slurm_deb_stat.stat.isreg
+        fail_msg: "DEB file not found on control machine: {{ slurm_deb_path }}"
+      run_once: true
+
+    - name: Copy DEB package to node
+      copy:
+        src: "{{ slurm_deb_path }}"
+        dest: "{{ remote_deb_path }}"
+        mode: "0644"
+
+    - name: Install DEB package with downgrade/reinstall support
+      command: >-
+        apt-get install -y --reinstall --allow-downgrades --no-install-recommends {{ remote_deb_path }}
+      register: slurm_install
+      changed_when: >-
+        'newly installed' in slurm_install.stdout or
+        'upgraded' in slurm_install.stdout or
+        'downgraded' in slurm_install.stdout or
+        'reinstalled' in slurm_install.stdout
+
+    - name: Reload systemd so new unit files are discovered
+      command: systemctl daemon-reload
+      changed_when: false
+
+    - name: Verify package is installed
+      command: "dpkg -l {{ slurm_pkg_name }}"
+      changed_when: false

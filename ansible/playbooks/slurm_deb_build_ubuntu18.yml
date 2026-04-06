@@ -1,0 +1,189 @@
+---
+- name: Build Slurm from source and package as DEB on Ubuntu 18
+  hosts: localhost
+  become: true
+  gather_facts: true
+
+  vars:
+    slurm_version: "24.05.5"
+    slurm_tarball: "slurm-{{ slurm_version }}.tar.bz2"
+    slurm_download_url: "https://download.schedmd.com/slurm/{{ slurm_tarball }}"
+
+    slurm_build_root: /tmp/slurm-deb-build
+    slurm_src_root: "{{ slurm_build_root }}/src"
+    slurm_src_dir: "{{ slurm_src_root }}/slurm-{{ slurm_version }}"
+    slurm_artifacts_dir: "{{ slurm_build_root }}/artifacts"
+    slurm_tmp_dir: "{{ slurm_build_root }}/tmp"
+    slurm_pkg_root: "{{ slurm_build_root }}/pkgroot"
+    slurm_sysconfdir: /etc/slurm
+
+    slurm_pkg_name: slurm-custom
+    slurm_pkg_release: "1"
+    slurm_pkg_version: "{{ slurm_version }}-{{ slurm_pkg_release }}"
+    slurm_pkg_arch: arm64
+
+  tasks:
+    - name: Ensure host is Ubuntu 18
+      ansible.builtin.assert:
+        that:
+          - ansible_distribution == 'Ubuntu'
+          - ansible_distribution_major_version == '18'
+        fail_msg: "This playbook is intended to run on Ubuntu 18 build hosts."
+
+    - name: Ensure host architecture is arm64/aarch64
+      ansible.builtin.assert:
+        that:
+          - ansible_architecture in ['aarch64', 'arm64']
+        fail_msg: "Build host must be arm64/aarch64 to produce Jetson-compatible packages."
+
+    - name: Install build prerequisites for source build
+      ansible.builtin.apt:
+        name:
+          - build-essential
+          - pkg-config
+          - ca-certificates
+          - wget
+          - bzip2
+          - dpkg-dev
+          - munge
+          - libmunge-dev
+          - libpam0g-dev
+          - libhwloc-dev
+          - libnuma-dev
+          - libreadline-dev
+          - libncurses5-dev
+          - libjson-c-dev
+          - libyaml-dev
+          - libhttp-parser-dev
+          - libcurl4-openssl-dev
+          - libdbus-1-dev
+        state: present
+        update_cache: true
+
+    - name: Ensure build directories exist
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        mode: "0755"
+      loop:
+        - "{{ slurm_build_root }}"
+        - "{{ slurm_src_root }}"
+        - "{{ slurm_artifacts_dir }}"
+        - "{{ slurm_tmp_dir }}"
+
+    - name: Download Slurm source tarball
+      ansible.builtin.get_url:
+        url: "{{ slurm_download_url }}"
+        dest: "{{ slurm_src_root }}/{{ slurm_tarball }}"
+        mode: "0644"
+      environment:
+        TMPDIR: "{{ slurm_tmp_dir }}"
+
+    - name: Remove previous source and package root directories
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - "{{ slurm_src_dir }}"
+        - "{{ slurm_pkg_root }}"
+
+    - name: Unpack Slurm source
+      ansible.builtin.unarchive:
+        src: "{{ slurm_src_root }}/{{ slurm_tarball }}"
+        dest: "{{ slurm_src_root }}"
+        remote_src: true
+      environment:
+        TMPDIR: "{{ slurm_tmp_dir }}"
+
+    - name: Configure Slurm build (manual)
+      ansible.builtin.command: >-
+        ./configure
+        --prefix=/usr
+        --sysconfdir={{ slurm_sysconfdir }}
+        --with-munge
+        --without-pmix
+        --disable-slurmrestd
+      args:
+        chdir: "{{ slurm_src_dir }}"
+      environment:
+        TMPDIR: "{{ slurm_tmp_dir }}"
+
+    - name: Compile Slurm source
+      ansible.builtin.command: make -j "{{ ansible_processor_vcpus | default(2) }}"
+      args:
+        chdir: "{{ slurm_src_dir }}"
+      environment:
+        TMPDIR: "{{ slurm_tmp_dir }}"
+
+    - name: Install Slurm into package staging directory
+      ansible.builtin.command: make install DESTDIR={{ slurm_pkg_root }}
+      args:
+        chdir: "{{ slurm_src_dir }}"
+      environment:
+        TMPDIR: "{{ slurm_tmp_dir }}"
+
+    - name: Ensure systemd unit directory exists in package root
+      ansible.builtin.file:
+        path: "{{ slurm_pkg_root }}/lib/systemd/system"
+        state: directory
+        mode: "0755"
+
+    - name: Add slurmd systemd unit to package
+      ansible.builtin.copy:
+        dest: "{{ slurm_pkg_root }}/lib/systemd/system/slurmd.service"
+        mode: "0644"
+        content: |
+          [Unit]
+          Description=Slurm node daemon
+          After=network-online.target munge.service
+          Wants=network-online.target
+
+          [Service]
+          Type=simple
+          ExecStart=/usr/sbin/slurmd -D -s
+          ExecReload=/bin/kill -HUP $MAINPID
+          Restart=on-failure
+
+          [Install]
+          WantedBy=multi-user.target
+
+    - name: Ensure DEBIAN metadata directory exists
+      ansible.builtin.file:
+        path: "{{ slurm_pkg_root }}/DEBIAN"
+        state: directory
+        mode: "0755"
+
+    - name: Write DEB control file
+      ansible.builtin.copy:
+        dest: "{{ slurm_pkg_root }}/DEBIAN/control"
+        mode: "0644"
+        content: |
+          Package: {{ slurm_pkg_name }}
+          Version: {{ slurm_pkg_version }}
+          Section: admin
+          Priority: optional
+          Architecture: {{ slurm_pkg_arch }}
+          Depends: libc6, munge
+          Maintainer: HPC DIY <noreply@example.com>
+          Description: Slurm built from source for Ubuntu 18 arm64
+           Locally built Slurm package containing Slurm binaries and libraries.
+
+    - name: Add post-install script for systemd reload
+      ansible.builtin.copy:
+        dest: "{{ slurm_pkg_root }}/DEBIAN/postinst"
+        mode: "0755"
+        content: |
+          #!/bin/sh
+          set -e
+          if command -v systemctl >/dev/null 2>&1; then
+            systemctl daemon-reload || true
+          fi
+          exit 0
+
+    - name: Build DEB package from staged installation
+      ansible.builtin.command: >-
+        dpkg-deb --build {{ slurm_pkg_root }} {{ slurm_artifacts_dir }}/{{ slurm_pkg_name }}_{{ slurm_pkg_version }}_{{ slurm_pkg_arch }}.deb
+
+    - name: Print artifact path
+      ansible.builtin.debug:
+        msg: "Built DEB package: {{ slurm_artifacts_dir }}/{{ slurm_pkg_name }}_{{ slurm_pkg_version }}_{{ slurm_pkg_arch }}.deb"

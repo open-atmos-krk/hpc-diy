@@ -1,0 +1,80 @@
+---
+- name: Sync user and group IDs across cluster nodes
+  hosts: nodes
+  become: true
+  gather_facts: false
+
+  vars:
+    sync_secondary_groups: false
+
+  tasks:
+    - name: Normalize sync_users input to a list
+      ansible.builtin.set_fact:
+        sync_users_normalized: "{{ (sync_users_input is string) | ternary(sync_users_input | from_yaml, sync_users_input) }}"
+      vars:
+        sync_users_input: "{{ sync_users | default([]) }}"
+
+    - name: Validate sync_users is provided
+      ansible.builtin.assert:
+        that:
+          - sync_users_normalized is iterable
+          - sync_users_normalized is not string
+          - sync_users_normalized | length > 0
+        fail_msg: "Set sync_users, for example: -e 'sync_users=[\"alice\",\"bob\"]'"
+
+    - name: Read passwd entries for requested users from control node
+      ansible.builtin.command: "getent passwd {{ item }}"
+      delegate_to: localhost
+      become: false
+      changed_when: false
+      loop: "{{ sync_users_normalized }}"
+      register: local_passwd_entries
+
+    - name: Build user specs from control node entries
+      ansible.builtin.set_fact:
+        sync_user_specs: "{{ (sync_user_specs | default([])) + [new_user_spec] }}"
+      vars:
+        username: "{{ item.stdout.split(':')[0] }}"
+        uid: "{{ item.stdout.split(':')[2] | int }}"
+        gid: "{{ item.stdout.split(':')[3] | int }}"
+        home: "{{ item.stdout.split(':')[5] | trim }}"
+        shell: "{{ item.stdout.split(':')[6] | trim }}"
+        primary_group: "{{ lookup('ansible.builtin.pipe', 'getent group ' ~ gid ~ ' | cut -d: -f1') | trim }}"
+        secondary_groups: "{{ lookup('ansible.builtin.pipe', 'id -Gn ' ~ username).split() | reject('equalto', primary_group) | list }}"
+        new_user_spec:
+          name: "{{ username }}"
+          uid: "{{ uid }}"
+          gid: "{{ gid }}"
+          group: "{{ primary_group }}"
+          home: "{{ home }}"
+          shell: "{{ shell }}"
+          secondary_groups: "{{ secondary_groups }}"
+      loop: "{{ local_passwd_entries.results }}"
+
+    - name: Ensure primary groups exist with matching GIDs
+      ansible.builtin.group:
+        name: "{{ item.group }}"
+        gid: "{{ item.gid }}"
+        state: present
+      loop: "{{ sync_user_specs }}"
+
+    - name: Ensure secondary groups exist with matching GIDs
+      ansible.builtin.group:
+        name: "{{ item }}"
+        gid: "{{ lookup('ansible.builtin.pipe', 'getent group ' ~ item ~ ' | cut -d: -f3') | int }}"
+        state: present
+      loop: "{{ sync_user_specs | map(attribute='secondary_groups') | flatten | unique }}"
+      when: sync_secondary_groups | bool
+
+    - name: Ensure users exist with matching UID and primary GID
+      ansible.builtin.user:
+        name: "{{ item.name }}"
+        uid: "{{ item.uid }}"
+        group: "{{ item.group }}"
+        home: "{{ item.home }}"
+        shell: "{{ item.shell }}"
+        create_home: true
+        groups: "{{ (sync_secondary_groups | bool) | ternary(item.secondary_groups | join(','), omit) }}"
+        append: "{{ (sync_secondary_groups | bool) | ternary(true, omit) }}"
+        state: present
+      loop: "{{ sync_user_specs }}"

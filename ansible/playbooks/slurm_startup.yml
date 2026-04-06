@@ -1,0 +1,103 @@
+---
+- name: Configure and start Slurm cluster services
+  hosts: slurm_hosts
+  become: true
+  gather_facts: false
+
+  vars:
+    slurm_sysconfdir: /etc/slurm
+    slurm_conf_src: "{{ playbook_dir }}/../config/slurm.conf"
+    slurm_conf_dest: "{{ slurm_sysconfdir }}/slurm.conf"
+
+    # Keep these aligned with slurm.conf values.
+    slurm_state_save_dir: /var/spool/slurmctld
+    slurmd_spool_dir: /var/spool/slurmd
+    slurmctld_log_file: /var/log/slurmctld.log
+    slurmd_log_file: /var/log/slurmd.log
+
+    # Inventory groups used for service roles.
+    slurm_controller_group: local
+    slurm_compute_group: nodes
+
+  tasks:
+    - name: Ensure munge is enabled and started before Slurm daemons
+      ansible.builtin.systemd:
+        name: munge
+        enabled: true
+        state: started
+
+    - name: Ensure Slurm sysconfdir exists
+      ansible.builtin.file:
+        path: "{{ slurm_sysconfdir }}"
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Ensure controller state directory exists
+      ansible.builtin.file:
+        path: "{{ slurm_state_save_dir }}"
+        state: directory
+        owner: slurm
+        group: slurm
+        mode: "0755"
+      when: inventory_hostname in groups.get(slurm_controller_group, [])
+
+    - name: Ensure compute spool directory exists
+      ansible.builtin.file:
+        path: "{{ slurmd_spool_dir }}"
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+      when: inventory_hostname in groups.get(slurm_compute_group, [])
+
+    - name: Ensure controller log file exists and is writable by slurm user
+      ansible.builtin.file:
+        path: "{{ slurmctld_log_file }}"
+        state: touch
+        owner: slurm
+        group: slurm
+        mode: "0644"
+      when: inventory_hostname in groups.get(slurm_controller_group, [])
+
+    - name: Ensure compute log file exists
+      ansible.builtin.file:
+        path: "{{ slurmd_log_file }}"
+        state: touch
+        owner: root
+        group: root
+        mode: "0644"
+      when: inventory_hostname in groups.get(slurm_compute_group, [])
+
+    - name: Install slurm.conf to sysconfdir on all Slurm hosts
+      ansible.builtin.copy:
+        src: "{{ slurm_conf_src }}"
+        dest: "{{ slurm_conf_dest }}"
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Enable slurmctld on controller hosts
+      ansible.builtin.systemd:
+        name: slurmctld
+        enabled: true
+      when: inventory_hostname in groups.get(slurm_controller_group, [])
+
+    - name: Enable slurmd on compute hosts
+      ansible.builtin.systemd:
+        name: slurmd
+        enabled: true
+      when: inventory_hostname in groups.get(slurm_compute_group, [])
+
+    - name: Start slurmctld on controller hosts
+      ansible.builtin.systemd:
+        name: slurmctld
+        state: started
+      when: inventory_hostname in groups.get(slurm_controller_group, [])
+
+    - name: Start slurmd on compute hosts
+      ansible.builtin.systemd:
+        name: slurmd
+        state: started
+      when: inventory_hostname in groups.get(slurm_compute_group, [])
