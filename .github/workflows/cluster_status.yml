@@ -1,4 +1,4 @@
-name: 'Main Workflow'
+name: 'Cluster Status Check'
 on:
   workflow_dispatch:
   schedule:
@@ -16,3 +16,13 @@ jobs:
             ping -c 5 "$target" || failed=1
           done
           exit $failed
+      - name: Check Slurm Node Status
+        shell: bash
+        run: |
+          sinfo -N -l
+      - name: Run slurm jobs
+        shell: bash
+        run: |
+          srun --chdir=/mnt/cluster-workspace/healthcheck -N1 -w ground-control /bin/bash -c 'echo "Hello from $(hostname)"'
+          srun --chdir=/mnt/cluster-workspace/healthcheck -N1 -w major-tom /bin/bash -c 'echo "Hello from $(hostname)"'
+          
