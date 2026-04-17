@@ -3,6 +3,8 @@ on:
   workflow_dispatch:
   schedule:
     - cron: "0 */6 * * *"
+  pull_request:
+    branches: [ main ]
 jobs:
   greet:
     runs-on: self-hosted
@@ -10,7 +12,7 @@ jobs:
       - name: Cluster Status Check
         shell: bash
         run: |
-          echo 'Hello from the $(hostname)!'
+          echo "Hello from the $(hostname)!"
           failed=0
           for target in major-tom ground-control; do
             ping -c 5 "$target" || failed=1
