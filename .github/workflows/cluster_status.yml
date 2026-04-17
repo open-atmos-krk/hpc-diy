@@ -10,7 +10,7 @@ jobs:
       - name: Cluster Status Check
         shell: bash
         run: |
-          echo 'Hello from the $(hostname)!'
+          echo "Hello from the $(hostname)!"
           failed=0
           for target in major-tom ground-control; do
             ping -c 5 "$target" || failed=1
