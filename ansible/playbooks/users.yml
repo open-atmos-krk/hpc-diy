@@ -1,0 +1,29 @@
+- name: Manage users
+  hosts: localhost
+  become: yes
+
+  tasks:
+    - name: Load all user YAML files
+      ansible.builtin.include_vars:
+        dir: users
+        extensions: ["yml", "yaml"]
+        name: users_raw
+
+    - name: Convert to list
+      ansible.builtin.set_fact:
+        users: "{{ users_raw | dict2items | map(attribute='value') | list }}"
+
+    - name: Create users
+      ansible.builtin.user:
+        name: "{{ item.username }}"
+        state: "{{ item.state | default('present') }}"
+        groups: "{{ item.groups | default([]) }}"
+      loop: "{{ users }}"
+
+    - name: Insert SSH key
+      ansible.builtin.authorized_key:
+        user: "{{ item.username }}"
+        key: "{{ item.ssh_key }}"
+      when: item.state | default('present') == 'present'
+      loop: "{{ users }}"
+
