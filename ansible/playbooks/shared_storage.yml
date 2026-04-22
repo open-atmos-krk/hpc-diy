@@ -1,0 +1,113 @@
+---
+- name: Mount external disk and export it over NFS on server
+  hosts: local
+  become: true
+  gather_facts: true
+
+  vars:
+    shared_disk_device: /dev/sda1
+    shared_mount_path: /mnt/cluster-workspace
+    nfs_allowed_cidr: 192.168.0.0/24
+    nfs_exports_file: /etc/exports.d/hpc-shared.exports
+
+  tasks:
+    - name: Install NFS server packages
+      ansible.builtin.apt:
+        name:
+          - nfs-kernel-server
+          - nfs-common
+        state: present
+        update_cache: true
+
+    - name: Detect filesystem type on shared disk partition
+      ansible.builtin.command: "blkid -o value -s TYPE {{ shared_disk_device }}"
+      register: shared_disk_fstype
+      changed_when: false
+      failed_when: false
+
+    - name: Fail when shared disk has no filesystem
+      ansible.builtin.assert:
+        that:
+          - shared_disk_fstype.rc == 0
+          - shared_disk_fstype.stdout | length > 0
+        fail_msg: "No filesystem found on {{ shared_disk_device }}. Format it first, then rerun this playbook."
+
+    - name: Get shared disk UUID
+      ansible.builtin.command: "blkid -o value -s UUID {{ shared_disk_device }}"
+      register: shared_disk_uuid
+      changed_when: false
+
+    - name: Ensure shared mount path exists on server
+      ansible.builtin.file:
+        path: "{{ shared_mount_path }}"
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Mount shared disk on server and persist in fstab
+      ansible.posix.mount:
+        path: "{{ shared_mount_path }}"
+        src: "UUID={{ shared_disk_uuid.stdout }}"
+        fstype: "{{ shared_disk_fstype.stdout }}"
+        opts: defaults
+        state: mounted
+
+    - name: Ensure exports.d directory exists
+      ansible.builtin.file:
+        path: /etc/exports.d
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Configure NFS export for shared mount
+      ansible.builtin.copy:
+        dest: "{{ nfs_exports_file }}"
+        owner: root
+        group: root
+        mode: "0644"
+        content: |
+          {{ shared_mount_path }} {{ nfs_allowed_cidr }}(rw,async,no_subtree_check,no_root_squash)
+
+    - name: Apply NFS exports
+      ansible.builtin.command: exportfs -ra
+      changed_when: false
+
+    - name: Ensure NFS server is enabled and running
+      ansible.builtin.systemd:
+        name: nfs-kernel-server
+        enabled: true
+        state: started
+
+- name: Mount shared NFS storage on worker nodes
+  hosts: nodes
+  become: true
+  gather_facts: false
+
+  vars:
+    shared_mount_path: /mnt/cluster-workspace
+    nfs_server_host: "{{ groups.get('local', ['localhost'])[0] }}"
+
+  tasks:
+    - name: Install NFS client package
+      ansible.builtin.apt:
+        name: nfs-common
+        state: present
+        update_cache: true
+
+    - name: Ensure shared mount path exists on worker
+      ansible.builtin.file:
+        path: "{{ shared_mount_path }}"
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Mount shared NFS path on worker and persist in fstab
+      ansible.posix.mount:
+        path: "{{ shared_mount_path }}"
+        src: "{{ hostvars[nfs_server_host].ansible_default_ipv4.address }}:{{ shared_mount_path }}"
+        fstype: nfs
+        opts: defaults,_netdev,nfsvers=3
+        state: mounted

@@ -1,0 +1,29 @@
+---
+- name: Generate shared MUNGE key on control node
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    munge_key_output: "$HOME/.munge/files/munge.key"
+
+  tasks:
+    - name: Ensure output directory exists
+      ansible.builtin.file:
+        path: "{{ munge_key_output | dirname }}"
+        state: directory
+        mode: "0700"
+
+    - name: Check whether MUNGE key already exists
+      ansible.builtin.stat:
+        path: "{{ munge_key_output }}"
+      register: munge_key_stat
+
+    - name: Generate MUNGE key when missing
+      ansible.builtin.command: "openssl rand -out {{ munge_key_output }} 1024"
+      when: not munge_key_stat.stat.exists
+
+    - name: Enforce secure permissions on generated key
+      ansible.builtin.file:
+        path: "{{ munge_key_output }}"
+        mode: "0400"

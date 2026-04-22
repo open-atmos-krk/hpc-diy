@@ -1,0 +1,26 @@
+---
+- name: Install OpenMPI on all Slurm hosts
+  hosts: slurm_hosts
+  become: true
+  gather_facts: false
+
+  vars:
+    openmpi_packages:
+      - openmpi-bin
+      - libopenmpi-dev
+
+  tasks:
+    - name: Install OpenMPI packages
+      ansible.builtin.apt:
+        name: "{{ openmpi_packages }}"
+        state: present
+        update_cache: true
+
+    - name: Verify mpirun is available
+      ansible.builtin.command: mpirun --version
+      register: mpirun_version
+      changed_when: false
+
+    - name: Show detected OpenMPI version
+      ansible.builtin.debug:
+        msg: "{{ mpirun_version.stdout_lines | default([]) }}"

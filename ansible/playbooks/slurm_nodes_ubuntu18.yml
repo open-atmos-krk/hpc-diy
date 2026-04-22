@@ -1,0 +1,149 @@
+---
+- name: Build and install Slurm on Ubuntu 18 compute nodes
+  hosts: nodes
+  become: true
+  gather_facts: true
+
+  vars:
+    slurm_version: "24.05.5"
+    slurm_tarball: "slurm-{{ slurm_version }}.tar.bz2"
+    slurm_download_url: "https://download.schedmd.com/slurm/{{ slurm_tarball }}"
+    slurm_build_root: "/mnt/cluster-workspace/builds/slurm/{{ inventory_hostname }}"
+    slurm_src_root: "{{ slurm_build_root }}/src"
+    slurm_src_dir: "{{ slurm_src_root }}/slurm-{{ slurm_version }}"
+    slurm_tmp_dir: "{{ slurm_build_root }}/tmp"
+    slurm_sysconfdir: /etc/slurm
+    slurmd_service_file: /etc/systemd/system/slurmd.service
+
+  tasks:
+    - name: Ensure host is Ubuntu 18
+      ansible.builtin.assert:
+        that:
+          - ansible_distribution == 'Ubuntu'
+          - ansible_distribution_major_version == '18'
+        fail_msg: "This playbook targets Ubuntu 18 compute hosts only."
+
+    - name: Install manual build prerequisites
+      ansible.builtin.apt:
+        name:
+          - build-essential
+          - pkg-config
+          - ca-certificates
+          - wget
+          - bzip2
+          - munge
+          - libmunge-dev
+          - libpam0g-dev
+          - libhwloc-dev
+          - libnuma-dev
+          - libreadline-dev
+          - libncurses5-dev
+          - libjson-c-dev
+          - libyaml-dev
+          - libhttp-parser-dev
+          - libcurl4-openssl-dev
+          - libdbus-1-dev
+        state: present
+        update_cache: true
+
+    - name: Remove packaged Slurm artifacts before manual install
+      ansible.builtin.shell: >-
+        dpkg -l | awk '/^ii\s+slurm-smd/ {print $2}' | xargs -r apt-get purge -y
+      args:
+        executable: /bin/bash
+
+    - name: Ensure Slurm sysconfdir exists
+      ansible.builtin.file:
+        path: "{{ slurm_sysconfdir }}"
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Ensure Slurm build directories exist
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        mode: "0755"
+      loop:
+        - "{{ slurm_build_root }}"
+        - "{{ slurm_src_root }}"
+        - "{{ slurm_tmp_dir }}"
+
+    - name: Download Slurm source tarball
+      ansible.builtin.get_url:
+        url: "{{ slurm_download_url }}"
+        dest: "{{ slurm_src_root }}/{{ slurm_tarball }}"
+        mode: "0644"
+      environment:
+        TMPDIR: "{{ slurm_tmp_dir }}"
+
+    - name: Remove previous source directory before unpacking
+      ansible.builtin.file:
+        path: "{{ slurm_src_dir }}"
+        state: absent
+
+    - name: Unpack Slurm source
+      ansible.builtin.unarchive:
+        src: "{{ slurm_src_root }}/{{ slurm_tarball }}"
+        dest: "{{ slurm_src_root }}"
+        remote_src: true
+      environment:
+        TMPDIR: "{{ slurm_tmp_dir }}"
+
+    - name: Configure Slurm build (manual)
+      ansible.builtin.command: >-
+        ./configure
+        --prefix=/usr
+        --sysconfdir={{ slurm_sysconfdir }}
+        --with-munge
+        --without-pmix
+        --disable-slurmrestd
+      args:
+        chdir: "{{ slurm_src_dir }}"
+      environment:
+        TMPDIR: "{{ slurm_tmp_dir }}"
+
+    - name: Build Slurm binaries (manual)
+      ansible.builtin.command: make -j "{{ ansible_processor_vcpus | default(2) }}"
+      args:
+        chdir: "{{ slurm_src_dir }}"
+      environment:
+        TMPDIR: "{{ slurm_tmp_dir }}"
+
+    - name: Install Slurm binaries (manual)
+      ansible.builtin.command: make install
+      args:
+        chdir: "{{ slurm_src_dir }}"
+      environment:
+        TMPDIR: "{{ slurm_tmp_dir }}"
+
+    - name: Install slurmd systemd unit for manual build
+      ansible.builtin.copy:
+        dest: "{{ slurmd_service_file }}"
+        owner: root
+        group: root
+        mode: "0644"
+        content: |
+          [Unit]
+          Description=Slurm node daemon
+          After=network-online.target munge.service
+          Wants=network-online.target
+
+          [Service]
+          Type=simple
+          ExecStart=/usr/sbin/slurmd -D -s
+          ExecReload=/bin/kill -HUP $MAINPID
+          Restart=on-failure
+
+          [Install]
+          WantedBy=multi-user.target
+
+    - name: Reload systemd after slurmd unit changes
+      ansible.builtin.systemd:
+        daemon_reload: true
+
+    - name: Refresh dynamic linker cache
+      ansible.builtin.command: ldconfig
+      args:
+        chdir: /

@@ -1,26 +1,21 @@
-<h1 style="text-align:center;">HPC DIY</h1>
 
-This repository contains playbooks and services required to setup and manage our [DIY Supercomputer](https://open-atmos-krk.github.io/projects/hpc-diy)
+# HPC DIY
 
-## Ansible playbooks
+A small, opinionated toolkit for building and operating a DIY HPC cluster.
 
-### dnsmasq.yml
-After you execute the playbook, you get:
-- `systemd-resolved` disabled
-- DNS server running (via dnsmasq) and configured in `/etc/resolv.conf`
-- DHCP server running (via dnsmasq)
-- internet access for clients using DHCP server
+This repository contains two primary pieces:
 
-#### How do i run it?
-```bash
-sudo ansible-playbook -i localhost ansible/playbooks/dnsmasq.yml
-```
+- Ansible playbooks and roles for provisioning and configuring cluster nodes — see [ansible/README.md](ansible/README.md).
+- A lightweight Python-based cluster control utility for runtime checks and helpers — see [cluster-control/README.md](cluster-control/README.md).
 
-### cluster_control.yml
-After you execute the playbook, you get:
-- [cluster_control](./cluster-control/README.md) service deployed on server using systemd-services (can be managed by [systemctl](https://documentation.suse.com/smart/systems-management/html/systemd-management/index.html))
 
-#### How do i run it?
-```bash
-sudo ansible-playbook -i localhost ansible/playbooks/cluster_control.yml
-```
+## Quick start
+
+1. Read the Ansible guide if you need to provision or update nodes: [ansible/README.md](ansible/README.md).
+2. Use [cluster-control/README.md](cluster-control/README.md) for runtime tools and scripts that help manage and verify the cluster.
+
+## Repository layout (top-level)
+
+- `ansible/` — Ansible playbooks, roles, inventories and configuration for the cluster.
+- `cluster-control/` — Python package and CLI for cluster checks and utilities.
+

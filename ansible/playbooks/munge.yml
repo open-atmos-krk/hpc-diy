@@ -1,0 +1,78 @@
+---
+- name: Install and configure MUNGE
+  hosts: slurm_hosts
+  become: true
+  gather_facts: false
+
+  vars:
+    munge_key_src: "{{ playbook_dir }}/../files/munge.key"
+    munge_key_dest: /etc/munge/munge.key
+
+  tasks:
+    - name: Ensure source munge.key exists on control node
+      ansible.builtin.stat:
+        path: "{{ munge_key_src }}"
+      delegate_to: localhost
+      become: false
+      register: local_munge_key
+      run_once: true
+
+    - name: Fail if source munge.key is missing on control node
+      ansible.builtin.assert:
+        that:
+          - local_munge_key.stat.exists
+        fail_msg: "Missing MUNGE key at {{ munge_key_src }}. Create it once and rerun."
+      run_once: true
+
+    - name: Install MUNGE packages
+      ansible.builtin.apt:
+        name:
+          - munge
+        state: present
+        update_cache: true
+
+    - name: Ensure MUNGE directories exist with correct ownership
+      ansible.builtin.file:
+        path: "{{ item.path }}"
+        state: directory
+        owner: munge
+        group: munge
+        mode: "{{ item.mode }}"
+      loop:
+        - { path: /etc/munge, mode: "0700" }
+        - { path: /var/lib/munge, mode: "0700" }
+        - { path: /var/log/munge, mode: "0700" }
+
+    - name: Distribute shared munge.key
+      ansible.builtin.copy:
+        src: "{{ munge_key_src }}"
+        dest: "{{ munge_key_dest }}"
+        owner: munge
+        group: munge
+        mode: "0400"
+      no_log: true
+      notify: Restart munged
+
+    - name: Ensure munged is enabled and started
+      ansible.builtin.systemd:
+        name: munge
+        enabled: true
+        state: started
+
+    - name: Restart munged immediately when key changed
+      ansible.builtin.meta: flush_handlers
+
+    - name: Validate MUNGE authentication locally
+      ansible.builtin.shell: "munge -n | unmunge | grep -q 'STATUS:.*Success'"
+      args:
+        executable: /bin/bash
+      changed_when: false
+
+    - name: Gather services
+      ansible.builtin.service_facts:
+
+  handlers:
+    - name: Restart munged
+      ansible.builtin.systemd:
+        name: munge
+        state: restarted
