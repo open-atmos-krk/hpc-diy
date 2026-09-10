@@ -32,20 +32,13 @@
           rtcsync
           keyfile /etc/chrony/chrony.keys
           leapsectz right/UTC
-      notify: Restart chrony
 
     - name: Ensure chrony service is enabled and running
       ansible.builtin.systemd:
         name: chrony
         enabled: true
-        state: started
+        state: restarted
 
     - name: Check chrony tracking status
       ansible.builtin.command: chronyc tracking
       changed_when: false
-
-  handlers:
-    - name: Restart chrony
-      ansible.builtin.systemd:
-        name: chrony
-        state: restarted
